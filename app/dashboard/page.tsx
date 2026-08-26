@@ -1,28 +1,16 @@
-// app/dashboard/page.tsx
-//
-// This is the page a user lands on right after signing in or signing up.
-// It's different from the homepage (app/page.tsx) because that page is
-// for visitors who haven't signed in yet. This page is personal --
-// it knows who you are and shows things relevant to you.
-
 import { currentUser } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@supabase/supabase-js"
 
-// This runs on the server, before the page is sent to the browser.
-// That's why we can safely use currentUser() here -- it checks
-// who is signed in using the request itself.
 export default async function DashboardPage() {
 
   const user = await currentUser()
 
-  // If somehow a signed-out person lands here, send them home instead
   if (!user) {
     redirect("/")
   }
 
-  // Connect to Supabase to fetch this user's own listings
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -40,7 +28,6 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* NAVBAR -- same as homepage, but simpler since user is signed in */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="text-xl font-bold text-gray-900">
@@ -54,8 +41,6 @@ export default async function DashboardPage() {
         </div>
       </nav>
 
-
-      {/* WELCOME BANNER */}
       <section className="bg-gray-900">
         <div className="max-w-6xl mx-auto px-6 py-14">
           <p className="text-yellow-400 text-sm font-semibold uppercase tracking-widest mb-2">
@@ -70,8 +55,6 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-
-      {/* QUICK ACTIONS */}
       <section className="max-w-6xl mx-auto px-6 -mt-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -100,8 +83,6 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-
-      {/* MY LISTINGS */}
       <section className="max-w-6xl mx-auto px-6 py-16">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-black text-gray-900">My listings</h2>
@@ -111,8 +92,6 @@ export default async function DashboardPage() {
         </div>
 
         {listings.length === 0 ? (
-
-          /* EMPTY STATE -- shown when the user has no listings yet */
           <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-12 text-center">
             <div className="text-4xl mb-4">📦</div>
             <p className="text-gray-900 font-bold text-lg mb-2">
@@ -128,19 +107,11 @@ export default async function DashboardPage() {
               List your first item
             </Link>
           </div>
-
         ) : (
-
-          /* REAL LISTINGS -- shown once the user has posted at least one item */
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {listings.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
-              >
-                <div className="h-32 bg-gray-100 flex items-center justify-center text-3xl">
-                  📦
-                </div>
+              <div key={item.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                <div className="h-32 bg-gray-100 flex items-center justify-center text-3xl">📦</div>
                 <div className="p-3">
                   <p className="text-xs text-gray-400 uppercase font-semibold tracking-wide">
                     {item.category}
@@ -166,4 +137,5 @@ export default async function DashboardPage() {
     </div>
   )
 }
+
 
