@@ -1,3 +1,11 @@
+// app/dashboard/page.tsx
+//
+// NEW IN THIS VERSION: before showing the dashboard, we check whether
+// this user has completed onboarding yet (do they have a "looking_for"
+// value saved?). If not, we send them to /onboarding first. Once
+// they've done it, this check passes and they land here normally
+// every time they sign in after that.
+
 import { currentUser } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
@@ -15,6 +23,18 @@ export default async function DashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  // Check if this user has completed onboarding
+  const { data: userRow } = await supabase
+    .from("users")
+    .select("looking_for")
+    .eq("clerk_id", user.id)
+    .single()
+
+  // If they haven't answered the onboarding questions yet, send them there first
+  if (!userRow?.looking_for) {
+    redirect("/onboarding")
+  }
 
   const { data: myListings } = await supabase
     .from("listings")
@@ -137,5 +157,4 @@ export default async function DashboardPage() {
     </div>
   )
 }
-
 
