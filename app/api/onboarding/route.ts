@@ -1,8 +1,4 @@
 // app/api/onboarding/route.ts
-//
-// This is a small API route -- when the onboarding page finishes,
-// it sends the user's answers here, and this code saves them into
-// the "users" table in Supabase, matched to the signed-in person.
 
 import { currentUser } from "@clerk/nextjs/server"
 import { createClient } from "@supabase/supabase-js"
@@ -16,6 +12,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 })
   }
 
+  // lookingFor is now an array too, e.g. ["buy", "sell"]
   const { lookingFor, interests } = await req.json()
 
   const supabase = createClient(
@@ -26,7 +23,7 @@ export async function POST(req: Request) {
   const { error } = await supabase
     .from("users")
     .update({
-      looking_for: lookingFor,
+      looking_for: lookingFor,   // now saved as an array/list, not a single word
       interests: interests,
     })
     .eq("clerk_id", user.id)
@@ -38,5 +35,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ success: true })
 }
-
 

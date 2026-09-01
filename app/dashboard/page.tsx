@@ -32,7 +32,8 @@ export default async function DashboardPage() {
     .single()
 
   // If they haven't answered the onboarding questions yet, send them there first
-  if (!userRow?.looking_for) {
+  // (looking_for is now a list, so we check if it's empty or missing)
+  if (!userRow?.looking_for || userRow.looking_for.length === 0) {
     redirect("/onboarding")
   }
 
@@ -157,4 +158,5 @@ export default async function DashboardPage() {
     </div>
   )
 }
+
 
