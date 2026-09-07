@@ -61,9 +61,11 @@ export async function POST(request: Request) {
       const primary = event.data.email_addresses?.find(
         (address) => address.id === event.data.primary_email_address_id,
       );
+      // Only write fields the event actually carried, so a payload without
+      // image_url does not blank an avatar that is already set.
       await updateUser(profile.id, {
         ...(primary ? { email: primary.email_address.toLowerCase() } : {}),
-        avatar_url: event.data.image_url ?? null,
+        ...(event.data.image_url ? { avatar_url: event.data.image_url } : {}),
       });
       break;
     }

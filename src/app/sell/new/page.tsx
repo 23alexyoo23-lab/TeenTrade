@@ -10,14 +10,13 @@ export default async function NewListingPage() {
   const user = await currentUser();
   if (!user) redirect("/login?next=/sell/new");
 
-  // 15.5 — under-16 accounts cannot publish before parental consent.
+  // Suspended accounts keep read access but cannot publish.
   if (user.account_status !== "active") {
     return (
       <div className="tt-container" style={{ paddingBlock: "var(--space-12)", maxWidth: 640 }}>
         <h1 className="t-h1" style={{ marginTop: 0 }}>You cannot list items yet</h1>
-        <Banner tone="amber" icon="users" title="Waiting for your parent or guardian">
-          Once they confirm your account you will be able to publish listings and message other teens. Use
-          the Resend email button in the banner at the top of the page if they have not received it.
+        <Banner tone="amber" icon="alert-triangle" title="This account is not active">
+          Listing and messaging are paused on this account. Contact us if you think this is a mistake.
         </Banner>
       </div>
     );

@@ -233,5 +233,3 @@ export const PAYMENT_DISCLAIMER =
 
 export const MIN_AGE = 13;
 export const MAX_AGE = 19;
-/** Below this age a parent or guardian must consent (9.2). */
-export const PARENTAL_CONSENT_AGE = 16;

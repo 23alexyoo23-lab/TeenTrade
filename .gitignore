@@ -11,3 +11,6 @@ next-env.d.ts
 .data/
 public/uploads/
 *.tsbuildinfo
+
+# clerk configuration (can include secrets)
+/.clerk/

@@ -56,9 +56,8 @@ npm run dev          # http://localhost:3000
 Clerk cannot ask for a date of birth, so signup is two steps:
 
 1. `/signup` — Clerk collects the email and password and creates the account.
-2. `/onboarding` — TeenTrade runs the age gate (13 to 19), verifies a Singapore
-   mobile number, takes a username and region, and asks for a parent or
-   guardian's email if the user is under 16.
+2. `/onboarding` — TeenTrade runs the age gate (13 to 19) and takes a username
+   and region.
 
 The profile row is written only at the end of step 2. Until then the person has
 a Clerk account but no TeenTrade profile, and the app treats them as signed out
@@ -75,9 +74,6 @@ an account and post a listing to see the screens with content in them.
 
 - `npm run typecheck` runs `tsc --noEmit`. It passes.
 - `npm run build` needs the Clerk and Supabase variables set, like `dev` does.
-- The SMS code and the parental consent link are **printed to the terminal**, not
-  sent, until an SMS and email provider are wired up. That is enough to click
-  all the way through both flows locally.
 - The Clerk webhook (`/api/webhooks/clerk`) is optional. Without it everything
   works; with it, email changes and account deletions in Clerk stay in step with
   the profile.
@@ -91,7 +87,7 @@ an account and post a listing to see the screens with content in them.
 | Framework | Next.js 16 App Router, React 19, TypeScript |
 | Styling | Tailwind v4 with the spec's design tokens as CSS custom properties |
 | Data | Supabase (Postgres) behind a repository layer (`src/lib/data.ts`) |
-| Auth | Clerk for credentials and sessions; the age gate and consent are ours |
+| Auth | Clerk for credentials and sessions; the age gate is ours |
 | Images | Compressed client-side to 1600px with a 400px thumbnail |
 
 Note that this project is on **Next.js 16**, where the `middleware.ts` file
@@ -142,12 +138,12 @@ Trade combine into a "Sell or Trade" listing; Giveaway is exclusive and clears
 the price. This choice drives the badges on cards, the filters, the result tabs
 and which action buttons appear on the listing page.
 
-### Age verification and parental consent
+### Age verification
 
-Signup gates on date of birth: under 13 and over 19 are refused, 13 to 15
-require a parent or guardian to confirm the account through an emailed link
-before the teen can list or message. A pending account can browse, and carries a
-persistent banner with a resend action. Consent links expire after 7 days.
+Signup gates on date of birth: under 13 and over 19 are refused. The check runs
+client-side for instant feedback and again on the server, and the profile row is
+only written once it passes — so the gate cannot be skipped by a half-finished
+signup.
 
 ### Trust and safety
 
@@ -162,9 +158,8 @@ persistent banner with a resend action. Consent links expire after 7 days.
   listings from feed and search, and closes conversations in both directions.
 - Handovers are steered to verified public meetup locations, and meetup details
   are pinned into the chat when an offer is accepted.
-- Precise location is never stored or shown, only a region. Real names and phone
-  numbers are never shown to other users. Phone numbers and parent emails are
-  encrypted at rest.
+- Precise location is never stored or shown, only a region. Real names are never
+  shown to other users; people are identified by username alone.
 
 ### Payments
 
@@ -177,9 +172,6 @@ stated in the purchase modal, the safety hub and the terms.
 
 These are choices, not gaps, and each is contained:
 
-- **No SMS provider.** `src/lib/otp.ts` holds codes in memory and logs them.
-  Point `deliver()` at a provider to go live.
-- **No email provider.** Consent links are logged rather than emailed.
 - **No object storage.** Images are compressed client-side and stored inline
   with the listing. `POST /api/v1/uploads/presign` keeps the presigned-URL
   contract in place for when S3 is added.

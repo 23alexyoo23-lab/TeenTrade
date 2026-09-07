@@ -31,15 +31,10 @@ export default async function SettingsPage() {
           <Row label="Email" value={user.email} />
           <Row label="Age" value={`${age}`} />
           <Row label="Region" value={`${regionLabel(user.region)} Singapore`} />
-          <Row label="Mobile verified" value={user.phone_verified ? "Yes" : "No"} />
           <Row label="Member since" value={formatDate(user.created_at)} />
-          {user.parent_consent_at ? (
-            <Row label="Parental consent" value={`Confirmed on ${formatDate(user.parent_consent_at)}`} />
-          ) : null}
         </div>
         <p className="t-caption" style={{ color: "var(--ink-muted)", marginTop: "var(--space-3)" }}>
-          Your email, mobile number and date of birth are never shown to other users. Mobile numbers and
-          parent emails are encrypted at rest.
+          Your email and date of birth are never shown to other users.
         </p>
       </section>
 

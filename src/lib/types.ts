@@ -8,7 +8,7 @@ export type Region = "north" | "south" | "east" | "west" | "central";
 export type Condition = "new" | "like_new" | "good" | "fair";
 export type TransactionType = "sell" | "trade" | "giveaway";
 
-export type AccountStatus = "pending_consent" | "active" | "suspended" | "deleted";
+export type AccountStatus = "active" | "suspended" | "deleted";
 
 export type ListingStatus =
   | "draft"
@@ -49,15 +49,9 @@ export interface User {
   username: string;
   email: string;
   date_of_birth: string; // ISO date
-  phone_number: string | null; // stored encrypted at rest (10.5)
-  phone_verified: boolean;
   avatar_url: string | null;
   region: Region;
   account_status: AccountStatus;
-  parent_email: string | null; // encrypted at rest (10.5)
-  parent_consent_at: string | null;
-  parent_consent_token: string | null;
-  parent_consent_sent_at: string | null;
   rating_average: number | null;
   rating_count: number;
   last_active_at: string;
@@ -195,7 +189,7 @@ export interface Block {
 export interface Notification {
   id: string;
   user_id: string;
-  kind: "message" | "offer" | "listing_status" | "consent" | "review" | "report";
+  kind: "message" | "offer" | "listing_status" | "review" | "report";
   title: string;
   body: string;
   href: string | null;

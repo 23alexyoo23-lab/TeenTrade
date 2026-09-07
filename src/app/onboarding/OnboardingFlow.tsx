@@ -9,18 +9,16 @@ import { track } from "@/lib/analytics";
 import type { Region } from "@/lib/types";
 
 /**
- * 9.1 age verification and 9.2 parental consent, for an account Clerk has
- * already created.
+ * 9.1 age verification, for an account Clerk has already created.
  *
  * Clerk collected the email and password at /signup. What is left is what
- * TeenTrade needs and Clerk does not do: date of birth -> phone verification ->
- * profile and community guidelines.
+ * TeenTrade needs and Clerk does not do: date of birth -> profile and
+ * community guidelines.
  */
-type Step = "age" | "phone" | "profile";
+type Step = "age" | "profile";
 
 const STEP_LABELS: { id: Step; label: string }[] = [
   { id: "age", label: "Your age" },
-  { id: "phone", label: "Verify" },
   { id: "profile", label: "Profile" },
 ];
 
@@ -31,14 +29,7 @@ export function OnboardingFlow() {
   const [submitting, setSubmitting] = useState(false);
 
   const [dateOfBirth, setDateOfBirth] = useState("");
-  const [parentEmail, setParentEmail] = useState("");
-  const [needsConsent, setNeedsConsent] = useState(false);
   const [ageBlocked, setAgeBlocked] = useState<string | null>(null);
-
-  const [phone, setPhone] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [devCode, setDevCode] = useState<string | null>(null);
-  const [otp, setOtp] = useState("");
 
   const [username, setUsername] = useState("");
   const [region, setRegion] = useState<Region>("central");
@@ -73,33 +64,7 @@ export function OnboardingFlow() {
       return;
     }
 
-    setNeedsConsent(age < 16);
-    setStep("phone");
-  }
-
-  async function sendOtp() {
-    setError(null);
-    setSubmitting(true);
-    try {
-      const response = await fetch("/api/v1/auth/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: phone }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setError(body?.error?.message ?? "We could not send the code.");
-        return;
-      }
-      setOtpSent(true);
-      // In production the code arrives by SMS. Locally it is returned so the
-      // flow can be completed without an SMS provider.
-      setDevCode(body.dev_code ?? null);
-    } catch {
-      setError("We could not reach TeenTrade. Check your connection and try again.");
-    } finally {
-      setSubmitting(false);
-    }
+    setStep("profile");
   }
 
   async function submit(event: React.FormEvent) {
@@ -118,9 +83,6 @@ export function OnboardingFlow() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date_of_birth: dateOfBirth,
-          parent_email: needsConsent ? parentEmail : null,
-          phone_number: phone,
-          otp,
           username,
           region,
           accepted_guidelines: acceptedGuidelines,
@@ -133,12 +95,9 @@ export function OnboardingFlow() {
         return;
       }
 
-      track("signup_completed", {
-        age_bracket: body.age_bracket,
-        required_parental_consent: body.requires_parental_consent,
-      });
+      track("signup_completed", { age_bracket: body.age_bracket });
 
-      router.push(body.requires_parental_consent ? "/signup/pending" : "/");
+      router.push("/");
       router.refresh();
     } catch {
       setError("We could not reach TeenTrade. Check your connection and try again.");
@@ -214,106 +173,6 @@ export function OnboardingFlow() {
         </>
       ) : null}
 
-      {step === "phone" ? (
-        <>
-          {needsConsent ? (
-            <div style={{ marginBottom: "var(--space-4)" }}>
-              <Banner tone="amber" icon="users" title="A parent or guardian needs to approve your account">
-                Because you are under 16, we will email your parent or guardian a link to confirm. You can
-                browse straight away, and you will be able to list and message once they confirm.
-              </Banner>
-            </div>
-          ) : null}
-
-          {needsConsent ? (
-            <Field label="Parent or guardian email" htmlFor="onboarding-parent-email">
-              <input
-                id="onboarding-parent-email"
-                className="input"
-                type="email"
-                required
-                value={parentEmail}
-                onChange={(event) => setParentEmail(event.target.value)}
-              />
-            </Field>
-          ) : null}
-
-          <Field
-            label="Mobile number"
-            htmlFor="onboarding-phone"
-            help="Singapore numbers only. We never show your number to other users."
-          >
-            <input
-              id="onboarding-phone"
-              className="input"
-              type="tel"
-              inputMode="tel"
-              placeholder="9123 4567"
-              required
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-            />
-          </Field>
-
-          {otpSent ? (
-            <Field label="Verification code" htmlFor="onboarding-otp" help="We sent a 6-digit code by SMS.">
-              <input
-                id="onboarding-otp"
-                className="input"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                required
-                value={otp}
-                onChange={(event) => setOtp(event.target.value.replace(/\D/g, ""))}
-              />
-              {devCode ? (
-                <p className="t-caption" style={{ marginTop: 6, color: "var(--ink-muted)" }}>
-                  Development build: your code is <strong>{devCode}</strong>.
-                </p>
-              ) : null}
-            </Field>
-          ) : null}
-
-          <div style={{ display: "flex", gap: "var(--space-3)" }}>
-            <button type="button" className="btn btn-tertiary" onClick={() => setStep("age")}>
-              Back
-            </button>
-            {otpSent ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                onClick={() => {
-                  if (otp.length !== 6) {
-                    setError("Enter the 6-digit code we sent you.");
-                    return;
-                  }
-                  if (needsConsent && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(parentEmail)) {
-                    setError("Enter a valid email address for your parent or guardian.");
-                    return;
-                  }
-                  setError(null);
-                  setStep("profile");
-                }}
-              >
-                Continue
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                onClick={sendOtp}
-                disabled={submitting}
-              >
-                {submitting ? <span className="btn-spinner" /> : "Send code"}
-              </button>
-            )}
-          </div>
-        </>
-      ) : null}
-
       {step === "profile" ? (
         <>
           <Field
@@ -370,7 +229,7 @@ export function OnboardingFlow() {
           </label>
 
           <div style={{ display: "flex", gap: "var(--space-3)" }}>
-            <button type="button" className="btn btn-tertiary" onClick={() => setStep("phone")}>
+            <button type="button" className="btn btn-tertiary" onClick={() => setStep("age")}>
               Back
             </button>
             <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={submitting}>

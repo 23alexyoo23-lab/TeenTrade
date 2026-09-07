@@ -9,7 +9,7 @@ const STEPS = [
   {
     icon: "shield" as const,
     title: "Everyone here is a teen",
-    body: "Every account is age verified at signup and confirmed by phone. Under 16s need a parent or guardian to approve their account.",
+    body: "Every account is age verified at signup. TeenTrade is for 13 to 19 year olds only, so there are no adult accounts.",
   },
   {
     icon: "image" as const,

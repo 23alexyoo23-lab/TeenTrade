@@ -1,7 +1,8 @@
 import "server-only";
 
 import { auth } from "@clerk/nextjs/server";
-import { MAX_AGE, MIN_AGE, PARENTAL_CONSENT_AGE } from "./constants";
+import { redirect } from "next/navigation";
+import { MAX_AGE, MIN_AGE } from "./constants";
 import { getUserByClerkId, touchUser } from "./data";
 import { ageFromDob } from "./format";
 import type { User } from "./types";
@@ -10,7 +11,7 @@ import type { User } from "./types";
  * Clerk owns authentication: signing up, logging in, passwords, the session
  * cookie and its expiry. This module maps the Clerk session onto the TeenTrade
  * profile in Supabase, and keeps the parts Clerk does not do — the age gate
- * (9.1), parental consent (9.2) and account status.
+ * (9.1) and account status.
  *
  * A signed-in Clerk user with no TeenTrade profile yet is treated as signed
  * out, so they are sent through /onboarding to complete the age gate before
@@ -72,6 +73,20 @@ export async function currentClerkUserId(): Promise<string | null> {
   }
 }
 
+/**
+ * Guard for the signed-out surfaces (/welcome, /login, /signup).
+ *
+ * Sends the caller onward if they should not be looking at a signed-out page:
+ * home when they have a profile, and onboarding when Clerk knows them but the
+ * profile does not exist yet. Without the second case a half-registered user
+ * lands on /login, where Clerk refuses to render <SignIn/> because they are
+ * already signed in, and there is no way forward.
+ */
+export async function redirectIfSignedIn(): Promise<void> {
+  if (await currentUser()) redirect("/");
+  if (await currentClerkUserId()) redirect("/onboarding");
+}
+
 /** True once a parent has consented, or when consent was never required. */
 export function canTransact(user: User): boolean {
   return user.account_status === "active";
@@ -83,7 +98,7 @@ export function canTransact(user: User): boolean {
  */
 export type AgeDecision =
   | { allowed: false; message: string }
-  | { allowed: true; requiresParentalConsent: boolean; age: number };
+  | { allowed: true; age: number };
 
 export function decideOnAge(dateOfBirth: string, now = new Date()): AgeDecision {
   const parsed = new Date(dateOfBirth);
@@ -102,16 +117,12 @@ export function decideOnAge(dateOfBirth: string, now = new Date()): AgeDecision 
     return { allowed: false, message: "TeenTrade is for teens only." };
   }
 
-  return {
-    allowed: true,
-    requiresParentalConsent: age < PARENTAL_CONSENT_AGE,
-    age,
-  };
+  return { allowed: true, age };
 }
 
 /** 14.1 signup_completed reports an age bracket rather than an exact age. */
 export function ageBracket(age: number): string {
-  return age < PARENTAL_CONSENT_AGE ? "13-15" : "16-19";
+  return age < 16 ? "13-15" : "16-19";
 }
 
 export function isValidUsername(username: string): boolean {
@@ -121,14 +132,4 @@ export function isValidUsername(username: string): boolean {
 
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
-}
-
-/** 9.1 — Singapore mobile numbers only. */
-export function isValidSgPhone(phone: string): boolean {
-  return /^(?:\+?65)?[89]\d{7}$/.test(phone.replace(/[\s-]/g, ""));
-}
-
-export function normaliseSgPhone(phone: string): string {
-  const digits = phone.replace(/[\s-]/g, "").replace(/^\+?65/, "");
-  return `+65${digits}`;
 }

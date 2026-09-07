@@ -4,12 +4,9 @@ import {
   ageBracket,
   currentClerkUserId,
   decideOnAge,
-  isValidEmail,
-  isValidSgPhone,
   isValidUsername,
-  normaliseSgPhone,
 } from "@/lib/auth";
-import { encryptField, newId, newToken } from "@/lib/crypto";
+import { newId } from "@/lib/crypto";
 import {
   createUser,
   getUserByClerkId,
@@ -18,14 +15,10 @@ import {
   recordEvent,
 } from "@/lib/data";
 import { REGIONS } from "@/lib/constants";
-import { verifyOtp } from "@/lib/otp";
 import type { Region, User } from "@/lib/types";
 
 interface OnboardingBody {
   date_of_birth?: string;
-  parent_email?: string | null;
-  phone_number?: string;
-  otp?: string;
   username?: string;
   region?: string;
   accepted_guidelines?: boolean;
@@ -34,11 +27,10 @@ interface OnboardingBody {
 /**
  * Completes a TeenTrade profile for an account Clerk has already created.
  *
- * Clerk handles the email and password at /signup. Everything TeenTrade needs
- * on top of that — 9.1 age verification, phone verification and 9.2 parental
- * consent — is collected here, and the profile row is only written once it all
- * passes. Until then the Clerk user has no TeenTrade profile and is treated as
- * signed out everywhere else.
+ * Clerk handles the email and password at /signup. What TeenTrade adds on top
+ * is the 9.1 age gate, a username and a region. The profile row is only written
+ * once that passes; until then the Clerk user has no TeenTrade profile and is
+ * treated as signed out everywhere else, so the age check cannot be skipped.
  */
 export async function POST(request: Request) {
   const clerkId = await currentClerkUserId();
@@ -57,7 +49,6 @@ export async function POST(request: Request) {
   if (!body) return apiError("VALIDATION_FAILED", "We could not read that request.");
 
   const username = body.username?.trim().toLowerCase() ?? "";
-  const phone = body.phone_number?.trim() ?? "";
 
   if (!isValidUsername(username)) {
     return apiError(
@@ -85,28 +76,6 @@ export async function POST(request: Request) {
     return apiError("VALIDATION_FAILED", decision.message, { field: "date_of_birth" });
   }
 
-  if (!isValidSgPhone(phone)) {
-    return apiError("VALIDATION_FAILED", "Enter a Singapore mobile number.", {
-      field: "phone_number",
-    });
-  }
-  if (!verifyOtp(normaliseSgPhone(phone), body.otp?.trim() ?? "")) {
-    return apiError(
-      "VALIDATION_FAILED",
-      "That code is not right, or it has expired. Send a new one.",
-      { field: "otp" },
-    );
-  }
-
-  const parentEmail = body.parent_email?.trim().toLowerCase() ?? "";
-  if (decision.requiresParentalConsent && !isValidEmail(parentEmail)) {
-    return apiError(
-      "VALIDATION_FAILED",
-      "Enter a valid email address for your parent or guardian.",
-      { field: "parent_email" },
-    );
-  }
-
   // The email on the profile is the verified one Clerk holds, not a free-text
   // field, so it cannot be used to claim someone else's address.
   const account = await clerkUser();
@@ -117,7 +86,6 @@ export async function POST(request: Request) {
 
   const region = (REGIONS.some((r) => r.value === body.region) ? body.region : "central") as Region;
   const now = new Date().toISOString();
-  const consentToken = decision.requiresParentalConsent ? newToken() : null;
 
   const user: User = {
     id: newId(),
@@ -125,16 +93,9 @@ export async function POST(request: Request) {
     username,
     email,
     date_of_birth: body.date_of_birth!,
-    // 10.5 — phone numbers and parent emails are encrypted at rest.
-    phone_number: encryptField(normaliseSgPhone(phone)),
-    phone_verified: true,
     avatar_url: account?.imageUrl ?? null,
     region,
-    account_status: decision.requiresParentalConsent ? "pending_consent" : "active",
-    parent_email: decision.requiresParentalConsent ? encryptField(parentEmail) : null,
-    parent_consent_at: null,
-    parent_consent_token: consentToken,
-    parent_consent_sent_at: decision.requiresParentalConsent ? now : null,
+    account_status: "active",
     rating_average: null,
     rating_count: 0,
     last_active_at: now,
@@ -144,22 +105,16 @@ export async function POST(request: Request) {
 
   await createUser(user);
 
-  if (decision.requiresParentalConsent) {
-    // The email itself is delivered by the mail provider in production.
-    console.info(`[teentrade] Consent link for ${username}: /parent-consent/${consentToken}`);
-  } else {
-    await notify(
-      user.id,
-      "listing_status",
-      "Welcome to TeenTrade",
-      "List your first item to get started.",
-      "/sell/new",
-    );
-  }
+  await notify(
+    user.id,
+    "listing_status",
+    "Welcome to TeenTrade",
+    "List your first item to get started.",
+    "/sell/new",
+  );
 
   await recordEvent("signup_completed", user.id, {
     age_bracket: ageBracket(decision.age),
-    required_parental_consent: decision.requiresParentalConsent,
   });
 
   return apiOk(
@@ -167,7 +122,6 @@ export async function POST(request: Request) {
       id: user.id,
       username: user.username,
       account_status: user.account_status,
-      requires_parental_consent: decision.requiresParentalConsent,
       age_bracket: ageBracket(decision.age),
     },
     201,
