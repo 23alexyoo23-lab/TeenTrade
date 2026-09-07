@@ -14,7 +14,6 @@ const KIND_ICON: Record<Notification["kind"], IconName> = {
   message: "message",
   offer: "swap",
   listing_status: "list",
-  consent: "users",
   review: "star",
   report: "shield",
 };

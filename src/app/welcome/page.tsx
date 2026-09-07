@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { HeroArt } from "@/components/HeroArt";
 import { Icon } from "@/components/Icon";
 import { ListingCard } from "@/components/ListingCard";
-import { currentUser } from "@/lib/auth";
+import { redirectIfSignedIn } from "@/lib/auth";
 import { searchListings } from "@/lib/data";
 import { MAX_AGE, MIN_AGE, PAYMENT_DISCLAIMER } from "@/lib/constants";
 
@@ -11,8 +10,7 @@ export const metadata = { title: "Buy. Sell. Trade. Made for teens." };
 
 /** Signed-out landing page. Home itself is authenticated (8.1). */
 export default async function WelcomePage() {
-  const user = await currentUser();
-  if (user) redirect("/");
+  await redirectIfSignedIn();
 
   const { data: newest } = await searchListings({ sort: "newest", perPage: 4 }, null);
 
@@ -39,7 +37,7 @@ export default async function WelcomePage() {
             </Link>
           </div>
           <p className="t-caption" style={{ color: "var(--ink-muted)", marginTop: "var(--space-4)" }}>
-            For ages {MIN_AGE} to {MAX_AGE} in Singapore. Under 16s need a parent or guardian to approve.
+            For ages {MIN_AGE} to {MAX_AGE} in Singapore. Every account is age verified at signup.
           </p>
         </div>
 

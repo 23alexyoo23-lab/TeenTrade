@@ -28,9 +28,7 @@ export default function PrivacyPage() {
       <Section title="What we collect and why">
         <ul>
           <li><strong>Email and password</strong> to sign you in</li>
-          <li><strong>Date of birth</strong> to check you are 13 to 19 and whether parental consent is needed</li>
-          <li><strong>Mobile number</strong> to verify you are a real person. Encrypted at rest, never shown</li>
-          <li><strong>Parent or guardian email</strong> for under 16s, to request consent. Encrypted at rest</li>
+          <li><strong>Date of birth</strong> to check you are 13 to 19</li>
           <li><strong>Listings, messages, offers and reviews</strong> to run the marketplace</li>
           <li><strong>What you view and search</strong> to recommend items and improve the product</li>
         </ul>
@@ -41,7 +39,6 @@ export default function PrivacyPage() {
           <li>Chat messages: 12 months, then deleted</li>
           <li>Messages in a thread linked to an open report: until the report is resolved, plus 90 days</li>
           <li>Deleted listings: 30 days in soft-delete for moderation reference</li>
-          <li>Parental consent records for under-16 accounts: the life of the account plus 2 years</li>
         </ul>
       </Section>
 
@@ -63,7 +60,6 @@ export default function PrivacyPage() {
         <ul>
           <li>All traffic is served over HTTPS</li>
           <li>Passwords are stored as salted hashes, never in the clear</li>
-          <li>Mobile numbers and parent emails are encrypted at rest</li>
           <li>Sessions are held in an HttpOnly cookie and expire after 30 days</li>
         </ul>
       </Section>

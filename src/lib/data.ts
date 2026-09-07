@@ -53,7 +53,7 @@ type MessageReadState = Pick<Message, "id" | "read_by">;
 /* -------------------------------------------------------------------------- */
 
 export function toPublicUser(user: User): PublicUser {
-  // 10.5 — never expose email, phone number, parent email or date of birth.
+  // 10.5 — never expose email or date of birth.
   return {
     id: user.id,
     username: user.username,
@@ -80,25 +80,24 @@ export async function getUserByClerkId(clerkId: string): Promise<User | undefine
 }
 
 export async function getUserByUsername(username: string): Promise<User | undefined> {
+  // Exact match, not ilike: `_` and `%` are wildcards in LIKE, and usernames are
+  // allowed to contain `_`, so ilike("foo_bar") would also match "fooxbar".
+  // Usernames are stored lowercase, so lowering the input is enough.
   return maybeRow<User>(
     sb()
       .from("users")
       .select("*")
-      .ilike("username", username)
+      .eq("username", username.toLowerCase())
       .is("deleted_at", null)
       .single(),
   );
 }
 
 export async function getUserByEmail(email: string): Promise<User | undefined> {
+  // Exact match for the same reason as getUserByUsername; `_` is common in
+  // email local parts. Emails are stored lowercase.
   return maybeRow<User>(
-    sb().from("users").select("*").ilike("email", email).is("deleted_at", null).single(),
-  );
-}
-
-export async function getUserByConsentToken(token: string): Promise<User | undefined> {
-  return maybeRow<User>(
-    sb().from("users").select("*").eq("parent_consent_token", token).single(),
+    sb().from("users").select("*").eq("email", email.toLowerCase()).is("deleted_at", null).single(),
   );
 }
 
@@ -247,20 +246,45 @@ const FALLBACK_CATEGORY: Category = {
  * using three queries no matter how many listings are passed, so list screens
  * do not fan out into a query per row.
  */
+/**
+ * How much image data to load.
+ *
+ * Photos are stored inline as base64 data URLs, so a full-size one is around a
+ * megabyte. A browse page of 24 listings with ten photos each would be hundreds
+ * of megabytes if every image were fetched to render a card that only shows a
+ * thumbnail — so list surfaces fetch just the position-0 thumbnail, and only
+ * the listing and edit screens ask for "all".
+ */
+export type ImageScope = "cover" | "all";
+
+type CoverRow = Pick<ListingImage, "listing_id" | "thumbnail_url">;
+
 export async function hydrateListings(
   listings: Listing[],
   viewerId: string | null,
+  imageScope: ImageScope = "cover",
 ): Promise<ListingWithRelations[]> {
   if (listings.length === 0) return [];
 
   const listingIds = listings.map((l) => l.id);
   const sellerIds = [...new Set(listings.map((l) => l.seller_id))];
 
-  const [sellers, images, saved] = await Promise.all([
+  const [sellers, images, covers, saved] = await Promise.all([
     rows<User>(sb().from("users").select("*").in("id", sellerIds)),
-    rows<ListingImage>(
-      sb().from("listing_images").select("*").in("listing_id", listingIds).order("position"),
-    ),
+    imageScope === "all"
+      ? rows<ListingImage>(
+          sb().from("listing_images").select("*").in("listing_id", listingIds).order("position"),
+        )
+      : Promise.resolve([] as ListingImage[]),
+    imageScope === "cover"
+      ? rows<CoverRow>(
+          sb()
+            .from("listing_images")
+            .select("listing_id, thumbnail_url")
+            .in("listing_id", listingIds)
+            .eq("position", 0),
+        )
+      : Promise.resolve([] as CoverRow[]),
     viewerId
       ? rows<Pick<SavedItem, "listing_id">>(
           sb()
@@ -274,6 +298,7 @@ export async function hydrateListings(
 
   const sellerById = new Map(sellers.map((u) => [u.id, u]));
   const savedIds = new Set(saved.map((s) => s.listing_id));
+  const coverByListing = new Map(covers.map((c) => [c.listing_id, c.thumbnail_url]));
   const imagesByListing = new Map<string, ListingImage[]>();
   for (const image of images) {
     const bucket = imagesByListing.get(image.listing_id);
@@ -290,8 +315,12 @@ export async function hydrateListings(
     return {
       ...listing,
       seller: seller ? toPublicUser(seller) : DELETED_SELLER(listing),
+      // Empty under the "cover" scope — list surfaces render cover_image_url.
       images: listingImages,
-      cover_image_url: listingImages[0]?.url ?? null,
+      cover_image_url:
+        imageScope === "all"
+          ? (listingImages[0]?.url ?? null)
+          : (coverByListing.get(listing.id) ?? null),
       category: categoryById(listing.category_id) ?? FALLBACK_CATEGORY,
       category_path: categoryPath(listing.category_id),
       saved_by_viewer: savedIds.has(listing.id),
@@ -302,8 +331,9 @@ export async function hydrateListings(
 export async function hydrateListing(
   listing: Listing,
   viewerId: string | null,
+  imageScope: ImageScope = "all",
 ): Promise<ListingWithRelations> {
-  const [hydrated] = await hydrateListings([listing], viewerId);
+  const [hydrated] = await hydrateListings([listing], viewerId, imageScope);
   return hydrated;
 }
 
@@ -705,21 +735,20 @@ export async function imagesForListing(listingId: string): Promise<ListingImage[
 /* -------------------------------------------------------------------------- */
 
 export async function saveListing(userId: string, listingId: string): Promise<void> {
-  const existing = await maybeRow<Pick<SavedItem, "user_id">>(
+  // Insert-or-ignore in one statement, returning only genuinely new rows. A
+  // check-then-insert would double-count the save when the same user taps twice
+  // at once, or fail the second insert on the primary key.
+  const inserted = await rows<Pick<SavedItem, "listing_id">>(
     sb()
       .from("saved_items")
-      .select("user_id")
-      .eq("user_id", userId)
-      .eq("listing_id", listingId)
-      .single(),
+      .upsert(
+        { user_id: userId, listing_id: listingId, created_at: new Date().toISOString() },
+        { onConflict: "user_id,listing_id", ignoreDuplicates: true },
+      )
+      .select("listing_id"),
   );
-  if (existing) return;
+  if (inserted.length === 0) return;
 
-  await run(
-    sb()
-      .from("saved_items")
-      .insert({ user_id: userId, listing_id: listingId, created_at: new Date().toISOString() }),
-  );
   await run(sb().rpc("adjust_listing_save_count", { p_listing_id: listingId, p_delta: 1 }));
 }
 

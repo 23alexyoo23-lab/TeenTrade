@@ -13,7 +13,6 @@ export type ErrorCode =
   | "INVALID_TRANSACTION_TYPE"
   | "UNAUTHENTICATED"
   | "TOKEN_EXPIRED"
-  | "ACCOUNT_PENDING_CONSENT"
   | "USER_BLOCKED"
   | "NOT_LISTING_OWNER"
   | "LISTING_NOT_FOUND"
@@ -31,7 +30,6 @@ const STATUS_FOR: Record<ErrorCode, number> = {
   INVALID_TRANSACTION_TYPE: 400,
   UNAUTHENTICATED: 401,
   TOKEN_EXPIRED: 401,
-  ACCOUNT_PENDING_CONSENT: 403,
   USER_BLOCKED: 403,
   NOT_LISTING_OWNER: 403,
   LISTING_NOT_FOUND: 404,
@@ -76,17 +74,8 @@ export async function requireUser(): Promise<{ user: User } | { response: NextRe
   return { user };
 }
 
-/**
- * 9.2 / 15.5 — accounts waiting on parental consent can browse but cannot
- * publish listings, send messages or make offers.
- */
+/** Suspended and deleted accounts cannot publish, message or make offers. */
 export function requireActive(user: User): NextResponse | null {
-  if (user.account_status === "pending_consent") {
-    return apiError(
-      "ACCOUNT_PENDING_CONSENT",
-      "Your parent or guardian needs to confirm your account before you can do this.",
-    );
-  }
   if (user.account_status !== "active") {
     return apiError("UNAUTHENTICATED", "This account is not active.");
   }

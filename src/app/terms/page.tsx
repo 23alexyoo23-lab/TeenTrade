@@ -14,9 +14,8 @@ export default function TermsPage() {
 
       <Section title="Who can use TeenTrade">
         <p>
-          TeenTrade is for people aged {MIN_AGE} to {MAX_AGE} who are in Singapore. We verify age at signup
-          and by mobile number. Anyone under 16 needs a parent or guardian to confirm their account before
-          they can list items or send messages. Adult accounts are not permitted.
+          TeenTrade is for people aged {MIN_AGE} to {MAX_AGE} who are in Singapore. We verify age at
+          signup. Adult accounts are not permitted.
         </p>
       </Section>
 

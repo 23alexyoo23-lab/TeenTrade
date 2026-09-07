@@ -1,10 +1,49 @@
 -- TeenTrade schema (PRD section 11).
 --
--- Run this once against a new Supabase project: Dashboard -> SQL Editor ->
--- paste -> Run. It is safe to re-run; every statement is guarded.
+-- Run this once against your Supabase project: Dashboard -> SQL Editor ->
+-- New query -> paste the whole file -> Run.
 --
 -- Identity lives in Clerk. This schema holds the TeenTrade profile and links it
 -- to the Clerk account through users.clerk_id.
+--
+-- ===========================================================================
+-- READ THIS BEFORE RUNNING
+--
+-- Part 1 DROPS these tables and everything in them. That is deliberate: it
+-- makes the script re-runnable, and it clears the old starter's `users` table,
+-- which has a different shape and would otherwise make Part 2 fail with
+-- "column username does not exist".
+--
+-- On a fresh project this drops nothing. On a project with real data you care
+-- about, back it up first — or delete Part 1 and run Part 2 alone.
+-- ===========================================================================
+
+
+/* ========================================================================== */
+/* Part 1 — clear any previous version (DESTRUCTIVE)                          */
+/* ========================================================================== */
+
+drop table if exists public.analytics_events cascade;
+drop table if exists public.notifications    cascade;
+drop table if exists public.reviews          cascade;
+drop table if exists public.messages         cascade;
+drop table if exists public.conversations    cascade;
+drop table if exists public.listing_views    cascade;
+drop table if exists public.blocks           cascade;
+drop table if exists public.saved_items      cascade;
+drop table if exists public.reports          cascade;
+drop table if exists public.offers           cascade;
+drop table if exists public.listing_images   cascade;
+drop table if exists public.listings         cascade;
+drop table if exists public.users            cascade;
+
+drop function if exists public.increment_listing_view_count(uuid);
+drop function if exists public.adjust_listing_save_count(uuid, integer);
+
+
+/* ========================================================================== */
+/* Part 2 — create the schema                                                 */
+/* ========================================================================== */
 
 create extension if not exists "pgcrypto";
 
@@ -12,22 +51,17 @@ create extension if not exists "pgcrypto";
 /* users (11.2)                                                               */
 /* -------------------------------------------------------------------------- */
 
-create table if not exists public.users (
+create table public.users (
   id                      uuid primary key,
+  -- The Clerk account this profile belongs to. Clerk owns credentials; there
+  -- is deliberately no password column here.
   clerk_id                text unique not null,
   username                text unique not null,
   email                   text not null,
   date_of_birth           date not null,
-  -- 10.5: phone_number and parent_email arrive already encrypted by the app.
-  phone_number            text,
-  phone_verified          boolean not null default false,
   avatar_url              text,
   region                  text not null default 'central',
-  account_status          text not null default 'pending_consent',
-  parent_email            text,
-  parent_consent_at       timestamptz,
-  parent_consent_token    text,
-  parent_consent_sent_at  timestamptz,
+  account_status          text not null default 'active',
   rating_average          numeric(2,1),
   rating_count            integer not null default 0,
   last_active_at          timestamptz not null default now(),
@@ -37,18 +71,17 @@ create table if not exists public.users (
   constraint users_region_check
     check (region in ('north','south','east','west','central')),
   constraint users_account_status_check
-    check (account_status in ('pending_consent','active','suspended','deleted'))
+    check (account_status in ('active','suspended','deleted'))
 );
 
-create index if not exists users_clerk_id_idx on public.users (clerk_id);
-create index if not exists users_username_idx on public.users (lower(username));
-create index if not exists users_consent_token_idx on public.users (parent_consent_token);
+create index users_clerk_id_idx on public.users (clerk_id);
+create index users_username_idx on public.users (lower(username));
 
 /* -------------------------------------------------------------------------- */
 /* listings (11.3)                                                            */
 /* -------------------------------------------------------------------------- */
 
-create table if not exists public.listings (
+create table public.listings (
   id                 uuid primary key,
   seller_id          uuid not null references public.users(id) on delete cascade,
   title              text not null,
@@ -81,16 +114,15 @@ create table if not exists public.listings (
     check (region in ('north','south','east','west','central'))
 );
 
-create index if not exists listings_browse_idx
-  on public.listings (status, deleted_at, published_at desc);
-create index if not exists listings_seller_idx on public.listings (seller_id);
-create index if not exists listings_category_idx on public.listings (category_id);
+create index listings_browse_idx on public.listings (status, deleted_at, published_at desc);
+create index listings_seller_idx on public.listings (seller_id);
+create index listings_category_idx on public.listings (category_id);
 
 /* -------------------------------------------------------------------------- */
 /* listing_images (11.4)                                                      */
 /* -------------------------------------------------------------------------- */
 
-create table if not exists public.listing_images (
+create table public.listing_images (
   id             uuid primary key,
   listing_id     uuid not null references public.listings(id) on delete cascade,
   url            text not null,
@@ -99,14 +131,13 @@ create table if not exists public.listing_images (
   created_at     timestamptz not null default now()
 );
 
-create index if not exists listing_images_listing_idx
-  on public.listing_images (listing_id, position);
+create index listing_images_listing_idx on public.listing_images (listing_id, position);
 
 /* -------------------------------------------------------------------------- */
 /* offers (11.5)                                                              */
 /* -------------------------------------------------------------------------- */
 
-create table if not exists public.offers (
+create table public.offers (
   id                   uuid primary key,
   listing_id           uuid not null references public.listings(id) on delete cascade,
   offerer_id           uuid not null references public.users(id) on delete cascade,
@@ -129,15 +160,15 @@ create table if not exists public.offers (
     check (status in ('pending','accepted','declined','countered','expired','completed'))
 );
 
-create index if not exists offers_listing_idx on public.offers (listing_id);
-create index if not exists offers_offerer_idx on public.offers (offerer_id, created_at desc);
-create index if not exists offers_expiry_idx on public.offers (status, expires_at);
+create index offers_listing_idx on public.offers (listing_id);
+create index offers_offerer_idx on public.offers (offerer_id, created_at desc);
+create index offers_expiry_idx on public.offers (status, expires_at);
 
 /* -------------------------------------------------------------------------- */
 /* reports (11.6)                                                             */
 /* -------------------------------------------------------------------------- */
 
-create table if not exists public.reports (
+create table public.reports (
   id               uuid primary key,
   reporter_id      uuid not null references public.users(id) on delete cascade,
   target_type      text not null,
@@ -155,44 +186,43 @@ create table if not exists public.reports (
   constraint reports_status_check check (status in ('open','in_review','resolved','dismissed'))
 );
 
-create index if not exists reports_target_idx on public.reports (target_type, target_id, status);
-create index if not exists reports_reporter_idx on public.reports (reporter_id, created_at desc);
+create index reports_target_idx on public.reports (target_type, target_id, status);
+create index reports_reporter_idx on public.reports (reporter_id, created_at desc);
 
 /* -------------------------------------------------------------------------- */
 /* saved_items, blocks, listing_views — composite keys                        */
 /* -------------------------------------------------------------------------- */
 
-create table if not exists public.saved_items (
+create table public.saved_items (
   user_id     uuid not null references public.users(id) on delete cascade,
   listing_id  uuid not null references public.listings(id) on delete cascade,
   created_at  timestamptz not null default now(),
   primary key (user_id, listing_id)
 );
 
-create table if not exists public.blocks (
+create table public.blocks (
   blocker_id  uuid not null references public.users(id) on delete cascade,
   blocked_id  uuid not null references public.users(id) on delete cascade,
   created_at  timestamptz not null default now(),
   primary key (blocker_id, blocked_id)
 );
 
-create index if not exists blocks_blocked_idx on public.blocks (blocked_id);
+create index blocks_blocked_idx on public.blocks (blocked_id);
 
-create table if not exists public.listing_views (
+create table public.listing_views (
   user_id     uuid not null references public.users(id) on delete cascade,
   listing_id  uuid not null references public.listings(id) on delete cascade,
   viewed_at   timestamptz not null default now(),
   primary key (user_id, listing_id)
 );
 
-create index if not exists listing_views_recent_idx
-  on public.listing_views (user_id, viewed_at desc);
+create index listing_views_recent_idx on public.listing_views (user_id, viewed_at desc);
 
 /* -------------------------------------------------------------------------- */
 /* conversations and messages (12.5)                                          */
 /* -------------------------------------------------------------------------- */
 
-create table if not exists public.conversations (
+create table public.conversations (
   id               uuid primary key,
   listing_id       uuid references public.listings(id) on delete set null,
   offer_id         uuid references public.offers(id) on delete set null,
@@ -201,13 +231,12 @@ create table if not exists public.conversations (
   updated_at       timestamptz not null default now()
 );
 
--- Supports the `contains(participant_ids, [...])` lookups.
-create index if not exists conversations_participants_idx
+-- Supports the `contains(participant_ids, [...])` lookups in data.ts.
+create index conversations_participants_idx
   on public.conversations using gin (participant_ids);
-create index if not exists conversations_updated_idx
-  on public.conversations (updated_at desc);
+create index conversations_updated_idx on public.conversations (updated_at desc);
 
-create table if not exists public.messages (
+create table public.messages (
   id               uuid primary key,
   conversation_id  uuid not null references public.conversations(id) on delete cascade,
   sender_id        uuid not null references public.users(id) on delete cascade,
@@ -221,14 +250,13 @@ create table if not exists public.messages (
   constraint messages_kind_check check (kind in ('text','system'))
 );
 
-create index if not exists messages_conversation_idx
-  on public.messages (conversation_id, created_at);
+create index messages_conversation_idx on public.messages (conversation_id, created_at);
 
 /* -------------------------------------------------------------------------- */
 /* reviews, notifications, analytics                                          */
 /* -------------------------------------------------------------------------- */
 
-create table if not exists public.reviews (
+create table public.reviews (
   id          uuid primary key,
   offer_id    uuid not null references public.offers(id) on delete cascade,
   author_id   uuid not null references public.users(id) on delete cascade,
@@ -240,9 +268,9 @@ create table if not exists public.reviews (
   unique (offer_id, author_id)
 );
 
-create index if not exists reviews_subject_idx on public.reviews (subject_id, created_at desc);
+create index reviews_subject_idx on public.reviews (subject_id, created_at desc);
 
-create table if not exists public.notifications (
+create table public.notifications (
   id          uuid primary key,
   user_id     uuid not null references public.users(id) on delete cascade,
   kind        text not null,
@@ -253,13 +281,12 @@ create table if not exists public.notifications (
   created_at  timestamptz not null default now(),
 
   constraint notifications_kind_check
-    check (kind in ('message','offer','listing_status','consent','review','report'))
+    check (kind in ('message','offer','listing_status','review','report'))
 );
 
-create index if not exists notifications_user_idx
-  on public.notifications (user_id, created_at desc);
+create index notifications_user_idx on public.notifications (user_id, created_at desc);
 
-create table if not exists public.analytics_events (
+create table public.analytics_events (
   id          uuid primary key,
   name        text not null,
   user_id     uuid references public.users(id) on delete set null,
@@ -267,17 +294,17 @@ create table if not exists public.analytics_events (
   created_at  timestamptz not null default now()
 );
 
-create index if not exists analytics_events_name_idx
-  on public.analytics_events (name, created_at desc);
+create index analytics_events_name_idx on public.analytics_events (name, created_at desc);
 
 /* -------------------------------------------------------------------------- */
 /* Counters                                                                   */
 /* -------------------------------------------------------------------------- */
 
 -- Counted in Postgres so two simultaneous views or saves cannot overwrite each
--- other the way a read-modify-write from the app would.
+-- other the way a read-modify-write from the app would. data.ts calls these
+-- through supabase.rpc().
 
-create or replace function public.increment_listing_view_count(p_listing_id uuid)
+create function public.increment_listing_view_count(p_listing_id uuid)
 returns void
 language sql
 security definer
@@ -288,7 +315,7 @@ as $$
    where id = p_listing_id;
 $$;
 
-create or replace function public.adjust_listing_save_count(p_listing_id uuid, p_delta integer)
+create function public.adjust_listing_save_count(p_listing_id uuid, p_delta integer)
 returns void
 language sql
 security definer

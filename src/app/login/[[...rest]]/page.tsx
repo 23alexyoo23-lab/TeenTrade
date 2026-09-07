@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { SignIn } from "@clerk/nextjs";
-import { currentUser } from "@/lib/auth";
+import { redirectIfSignedIn } from "@/lib/auth";
 
 export const metadata = { title: "Log in" };
 
@@ -15,8 +14,7 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
-  const user = await currentUser();
-  if (user) redirect("/");
+  await redirectIfSignedIn();
 
   const { next } = await searchParams;
 

@@ -1,19 +1,17 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { SignUp } from "@clerk/nextjs";
-import { currentUser } from "@/lib/auth";
+import { redirectIfSignedIn } from "@/lib/auth";
 import { MAX_AGE, MIN_AGE } from "@/lib/constants";
 
 export const metadata = { title: "Create your account" };
 
 /**
  * Step one of two. Clerk collects the email and password here; the age gate
- * (9.1), phone verification and parental consent (9.2) follow at /onboarding,
+ * (9.1) follows at /onboarding,
  * which is where Clerk sends people once the account exists.
  */
 export default async function SignupPage() {
-  const user = await currentUser();
-  if (user) redirect("/");
+  await redirectIfSignedIn();
 
   return (
     <div className="tt-container" style={{ paddingBlock: "var(--space-12)", maxWidth: 560 }}>

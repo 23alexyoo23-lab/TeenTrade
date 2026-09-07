@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { ConsentBanner } from "@/components/ConsentBanner";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { ToastProvider } from "@/components/Toast";
@@ -45,8 +44,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <a href="#main" className="skip-link">
               Skip to main content
             </a>
-
-            {user?.account_status === "pending_consent" ? <ConsentBanner /> : null}
 
             <Header
               user={user ? toPublicUser(user) : null}
